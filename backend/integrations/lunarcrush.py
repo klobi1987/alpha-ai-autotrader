@@ -277,6 +277,108 @@ class LunarCrushClient:
             if self.last_request_time > 0 else 0
         }
     
+    def get_coin_timeseries(
+        self,
+        coin: str,
+        bucket: str = "hour",
+        interval: str = "1w"
+    ) -> Dict:
+        """
+        Get time-series data for a specific coin
+        
+        ⚠️ EXPENSIVE: Use only for final deep analysis (1 call per coin)
+        
+        Args:
+            coin: Coin ID or symbol
+            bucket: "hour" or "day"
+            interval: "1d", "1w", "1m", etc.
+        
+        Returns:
+            Time-series data with historical metrics
+        """
+        cache_key = f"timeseries_{coin}_{bucket}_{interval}"
+        
+        # Check cache (longer TTL for time-series)
+        cached = self.cache.get(cache_key)
+        if cached:
+            self.cache_hits += 1
+            return cached
+        
+        try:
+            logger.warning(f"⚠️ EXPENSIVE CALL: Fetching time-series for {coin}")
+            
+            data = self._make_request(
+                f"coins/{coin}/time-series/v2",
+                params={
+                    "bucket": bucket,
+                    "interval": interval
+                }
+            )
+            
+            timeseries = data.get("data", [])
+            
+            # Cache with longer TTL (30 min)
+            self.cache.set(cache_key, timeseries)
+            
+            logger.info(f"✅ Fetched {len(timeseries)} time-series points for {coin}")
+            return timeseries
+        
+        except Exception as e:
+            logger.error(f"Failed to fetch time-series for {coin}: {e}")
+            return []
+    
+    def analyze_trend(self, timeseries: List[Dict]) -> Dict:
+        """
+        Analyze trend from time-series data
+        
+        Args:
+            timeseries: Time-series data from get_coin_timeseries()
+        
+        Returns:
+            Trend analysis
+        """
+        if not timeseries or len(timeseries) < 2:
+            return {"trend": "unknown", "strength": 0}
+        
+        # Extract metrics over time
+        sentiments = [t.get("sentiment", 0) for t in timeseries if t.get("sentiment")]
+        social_volumes = [t.get("social_volume", 0) for t in timeseries if t.get("social_volume")]
+        altranks = [t.get("alt_rank", 0) for t in timeseries if t.get("alt_rank")]
+        
+        analysis = {}
+        
+        # Sentiment trend
+        if len(sentiments) >= 2:
+            sentiment_change = sentiments[-1] - sentiments[0]
+            analysis["sentiment_trend"] = "rising" if sentiment_change > 5 else "falling" if sentiment_change < -5 else "stable"
+            analysis["sentiment_change"] = sentiment_change
+        
+        # Social volume trend
+        if len(social_volumes) >= 2:
+            social_change_pct = ((social_volumes[-1] - social_volumes[0]) / social_volumes[0] * 100) if social_volumes[0] > 0 else 0
+            analysis["social_trend"] = "surging" if social_change_pct > 50 else "declining" if social_change_pct < -50 else "stable"
+            analysis["social_change_pct"] = social_change_pct
+        
+        # AltRank trend (lower is better)
+        if len(altranks) >= 2:
+            altrank_change = altranks[0] - altranks[-1]  # Positive = improved
+            analysis["altrank_trend"] = "improving" if altrank_change > 100 else "declining" if altrank_change < -100 else "stable"
+            analysis["altrank_change"] = altrank_change
+        
+        # Overall trend strength (0-10)
+        strength = 5.0
+        if analysis.get("sentiment_trend") == "rising":
+            strength += 1.5
+        if analysis.get("social_trend") == "surging":
+            strength += 2.0
+        if analysis.get("altrank_trend") == "improving":
+            strength += 1.5
+        
+        analysis["overall_trend"] = "bullish" if strength > 6.5 else "bearish" if strength < 4.5 else "neutral"
+        analysis["trend_strength"] = min(10, max(0, strength))
+        
+        return analysis
+    
     def clear_cache(self):
         """Clear all cached data"""
         self.cache.clear()
