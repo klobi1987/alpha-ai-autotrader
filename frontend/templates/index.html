@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en" x-data="app()" x-init="init()" :class="{'dark': darkMode}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alpha AI Autotrader - Autonomous Crypto Trading</title>
+    
+    <!-- TailwindCSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+    
+    <!-- Main Container -->
+    <div class="min-h-screen flex flex-col">
+        
+        <!-- Header -->
+        <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16">
+                    <!-- Logo -->
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                            <span class="text-white text-xl font-bold">🤖</span>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                                Alpha AI Autotrader
+                            </h1>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Autonomous Trading System</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Status & Controls -->
+                    <div class="flex items-center space-x-4">
+                        <!-- Trading Status -->
+                        <div class="flex items-center space-x-2">
+                            <div class="flex items-center space-x-2 px-3 py-1.5 rounded-full" 
+                                 :class="tradingActive ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400'">
+                                <div class="w-2 h-2 rounded-full" 
+                                     :class="tradingActive ? 'bg-green-500 animate-pulse' : 'bg-gray-400'"></div>
+                                <span class="text-sm font-medium" x-text="tradingActive ? 'Trading Active' : 'Trading Paused'"></span>
+                            </div>
+                        </div>
+                        
+                        <!-- Dark Mode Toggle -->
+                        <button @click="darkMode = !darkMode" 
+                                class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                            </svg>
+                            <svg x-show="darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                            </svg>
+                        </button>
+                        
+                        <!-- Settings -->
+                        <button @click="currentView = 'settings'" 
+                                class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Main Content -->
+        <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
+            
+            <!-- Navigation Tabs -->
+            <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
+                <nav class="-mb-px flex space-x-8">
+                    <button @click="currentView = 'dashboard'" 
+                            :class="currentView === 'dashboard' ? 'border-purple-500 text-purple-600 dark:text-purple-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                        Dashboard
+                    </button>
+                    <button @click="currentView = 'signals'" 
+                            :class="currentView === 'signals' ? 'border-purple-500 text-purple-600 dark:text-purple-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                        Signals
+                    </button>
+                    <button @click="currentView = 'positions'" 
+                            :class="currentView === 'positions' ? 'border-purple-500 text-purple-600 dark:text-purple-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                        Positions
+                    </button>
+                    <button @click="currentView = 'performance'" 
+                            :class="currentView === 'performance' ? 'border-purple-500 text-purple-600 dark:text-purple-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                        Performance
+                    </button>
+                    <button @click="currentView = 'agents'" 
+                            :class="currentView === 'agents' ? 'border-purple-500 text-purple-600 dark:text-purple-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                        AI Agents
+                    </button>
+                </nav>
+            </div>
+            
+            <!-- Dashboard View -->
+            <div x-show="currentView === 'dashboard'" x-cloak>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    <!-- Left Column - Chat -->
+                    <div class="lg:col-span-2">
+                        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 h-[600px] flex flex-col">
+                            <!-- Chat Header -->
+                            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <h2 class="text-lg font-semibold">💬 Chat with AI</h2>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">Ask questions, get insights, and control the system</p>
+                            </div>
+                            
+                            <!-- Chat Messages -->
+                            <div class="flex-1 overflow-y-auto p-6 space-y-4" x-ref="chatContainer">
+                                <template x-for="message in chatMessages" :key="message.id">
+                                    <div :class="message.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+                                        <div :class="message.role === 'user' ? 'bg-purple-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'"
+                                             class="max-w-[80%] rounded-lg px-4 py-2">
+                                            <p class="text-sm" x-text="message.content"></p>
+                                            <p class="text-xs opacity-70 mt-1" x-text="message.timestamp"></p>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                            
+                            <!-- Chat Input -->
+                            <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                                <form @submit.prevent="sendMessage" class="flex space-x-2">
+                                    <input type="text" 
+                                           x-model="chatInput"
+                                           placeholder="Ask me anything..."
+                                           class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                                    <button type="submit" 
+                                            class="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors">
+                                        Send
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Column - Quick Stats & Signals -->
+                    <div class="space-y-6">
+                        
+                        <!-- Quick Stats -->
+                        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                            <h3 class="text-lg font-semibold mb-4">📊 Quick Stats</h3>
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm text-gray-600 dark:text-gray-400">Portfolio Value</span>
+                                    <span class="text-sm font-semibold" x-text="'$' + portfolioValue.toLocaleString()"></span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm text-gray-600 dark:text-gray-400">Open Positions</span>
+                                    <span class="text-sm font-semibold" x-text="openPositions"></span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm text-gray-600 dark:text-gray-400">Total P&L</span>
+                                    <span class="text-sm font-semibold" 
+                                          :class="totalPnL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                                          x-text="(totalPnL >= 0 ? '+' : '') + totalPnL.toFixed(2) + '%'"></span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm text-gray-600 dark:text-gray-400">Win Rate</span>
+                                    <span class="text-sm font-semibold" x-text="winRate.toFixed(1) + '%'"></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Latest Signals -->
+                        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                            <h3 class="text-lg font-semibold mb-4">🎯 Latest Signals</h3>
+                            <div class="space-y-3">
+                                <template x-for="signal in latestSignals.slice(0, 3)" :key="signal.id">
+                                    <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <div class="flex justify-between items-start mb-2">
+                                            <span class="font-semibold" x-text="signal.symbol"></span>
+                                            <span class="px-2 py-1 text-xs rounded-full"
+                                                  :class="signal.decision === 'LONG' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'"
+                                                  x-text="signal.decision"></span>
+                                        </div>
+                                        <p class="text-xs text-gray-600 dark:text-gray-400" x-text="signal.reasoning"></p>
+                                        <div class="mt-2 flex items-center justify-between">
+                                            <span class="text-xs text-gray-500">Confidence</span>
+                                            <span class="text-xs font-semibold" x-text="signal.confidence + '/10'"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                        
+                        <!-- AI Agents Status -->
+                        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                            <h3 class="text-lg font-semibold mb-4">🤖 AI Agents</h3>
+                            <div class="space-y-2">
+                                <template x-for="agent in agentsStatus.slice(0, 5)" :key="agent.name">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-gray-600 dark:text-gray-400" x-text="agent.name"></span>
+                                        <div class="flex items-center space-x-2">
+                                            <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                                            <span class="text-xs text-gray-500" x-text="agent.confidence + '/10'"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Other Views (Signals, Positions, Performance, Agents) -->
+            <div x-show="currentView === 'signals'" x-cloak>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                    <h2 class="text-xl font-semibold mb-4">🎯 Trading Signals</h2>
+                    <p class="text-gray-600 dark:text-gray-400">Signals view implementation coming soon...</p>
+                </div>
+            </div>
+            
+            <div x-show="currentView === 'positions'" x-cloak>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                    <h2 class="text-xl font-semibold mb-4">💼 Open Positions</h2>
+                    <p class="text-gray-600 dark:text-gray-400">Positions view implementation coming soon...</p>
+                </div>
+            </div>
+            
+            <div x-show="currentView === 'performance'" x-cloak>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                    <h2 class="text-xl font-semibold mb-4">📈 Performance</h2>
+                    <p class="text-gray-600 dark:text-gray-400">Performance view implementation coming soon...</p>
+                </div>
+            </div>
+            
+            <div x-show="currentView === 'agents'" x-cloak>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                    <h2 class="text-xl font-semibold mb-4">🤖 AI Agents Status</h2>
+                    <p class="text-gray-600 dark:text-gray-400">Agents view implementation coming soon...</p>
+                </div>
+            </div>
+            
+            <div x-show="currentView === 'settings'" x-cloak>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                    <h2 class="text-xl font-semibold mb-4">⚙️ Settings</h2>
+                    <p class="text-gray-600 dark:text-gray-400">Settings view implementation coming soon...</p>
+                </div>
+            </div>
+            
+        </main>
+        
+        <!-- Footer -->
+        <footer class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 py-4">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <p class="text-center text-sm text-gray-500 dark:text-gray-400">
+                    Alpha AI Autotrader v1.0.0 | Made with ❤️ for the crypto community
+                </p>
+            </div>
+        </footer>
+        
+    </div>
+    
+    <!-- Custom JavaScript -->
+    <script src="/static/js/app.js"></script>
+    
+</body>
+</html>

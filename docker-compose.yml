@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  alpha-autotrader:
+    build: .
+    container_name: alpha-ai-autotrader
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Application
+      - APP_NAME=Alpha AI Autotrader
+      - DEBUG=false
+      
+      # Database
+      - DATABASE_URL=sqlite+aiosqlite:///./data/alpha_autotrader.db
+      
+      # API Keys (set these in .env file)
+      - LUNARCRUSH_API_KEY=${LUNARCRUSH_API_KEY}
+      - MEXC_API_KEY=${MEXC_API_KEY}
+      - MEXC_SECRET_KEY=${MEXC_SECRET_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      
+      # Trading Configuration
+      - TRADING_MODE=${TRADING_MODE:-testing}
+      - MAX_POSITION_SIZE_USD=${MAX_POSITION_SIZE_USD:-500}
+      - MAX_CONCURRENT_POSITIONS=${MAX_CONCURRENT_POSITIONS:-3}
+      - MAX_LEVERAGE=${MAX_LEVERAGE:-5}
+      - STOP_LOSS_PERCENT=${STOP_LOSS_PERCENT:-2.0}
+      - MIN_CONFIDENCE_SCORE=${MIN_CONFIDENCE_SCORE:-7.5}
+      
+      # Features
+      - ENABLE_AUTO_TRADING=${ENABLE_AUTO_TRADING:-false}
+      - ENABLE_FUTURES_TRADING=${ENABLE_FUTURES_TRADING:-true}
+      - ENABLE_SPOT_TRADING=${ENABLE_SPOT_TRADING:-true}
+      - ENABLE_MULTI_AI_CONSENSUS=${ENABLE_MULTI_AI_CONSENSUS:-true}
+      
+      # Scanning
+      - SCAN_INTERVAL=${SCAN_INTERVAL:-300}
+      - TOP_COINS_TO_SCAN=${TOP_COINS_TO_SCAN:-1000}
+      
+      # Telegram (Optional)
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    
+    volumes:
+      # Persist database
+      - ./data:/app/data
+      
+      # Persist logs
+      - ./logs:/app/logs
+      
+      # Mount .env file
+      - ./.env:/app/.env:ro
+    
+    networks:
+      - alpha-network
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  alpha-network:
+    driver: bridge
+
+volumes:
+  data:
+  logs:
