@@ -65,6 +65,15 @@ class Settings(BaseSettings):
     enable_futures_trading: bool = Field(default=True, alias="ENABLE_FUTURES_TRADING")
     enable_spot_trading: bool = Field(default=True, alias="ENABLE_SPOT_TRADING")
     
+    # AI Models
+    openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
+    claude_api_key: str = Field(default="", alias="CLAUDE_API_KEY")
+    enable_multi_ai_consensus: bool = Field(default=True, alias="ENABLE_MULTI_AI_CONSENSUS")
+    
+    # Scanning
+    scan_interval: int = Field(default=300, alias="SCAN_INTERVAL")  # 5 minutes
+    top_coins_to_scan: int = Field(default=1000, alias="TOP_COINS_TO_SCAN")
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -88,8 +97,16 @@ class Settings(BaseSettings):
 
 
 # Global settings instance
-settings = Settings()
+_settings = None
 
+def get_settings() -> Settings:
+    """Get global settings instance"""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+        # Create logs directory if it doesn't exist
+        os.makedirs(os.path.dirname(_settings.log_file), exist_ok=True)
+    return _settings
 
-# Create logs directory if it doesn't exist
-os.makedirs(os.path.dirname(settings.log_file), exist_ok=True)
+# For backward compatibility
+settings = get_settings()
