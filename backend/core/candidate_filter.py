@@ -1,289 +1,291 @@
 """
-Alpha AI Autotrader - Candidate Filter System
-Intelligent filtering to reduce AI analysis load
+Alpha AI Autotrader - Candidate Ranker (NOT Filter!)
+Ranks ALL coins by potential, Claude decides what to analyze
 """
 from typing import List, Dict, Optional
 from loguru import logger
 
 
-class CandidateFilter:
+class CandidateRanker:
     """
-    Smart filtering system to identify top trading candidates
+    Candidate Ranker - NO RIGID FILTERS!
     
-    Filters coins through multiple stages BEFORE AI analysis:
-    1. LunarCrush social metrics
-    2. Market cap & volume thresholds
-    3. Technical indicators
-    4. MEXC market data validation
+    Philosophy:
+    - Don't filter out degen gems (100x-1000x potential)
+    - Rank ALL coins by multiple factors
+    - Claude decides which ones to analyze deeply
+    - Micro caps are OPPORTUNITIES, not risks!
     
-    Goal: Reduce 100+ coins to 5-10 TOP candidates for AI analysis
+    Ranking Factors:
+    1. Social Surge (0 → 1000+ mentions = early pump signal)
+    2. AltRank Jump (big moves = momentum)
+    3. Early Stage Detection (low market cap = room to grow)
+    4. Volume Spike (sudden interest)
+    5. Sentiment Shift (bullish/bearish momentum)
     """
     
     def __init__(self, config: Optional[Dict] = None):
         """
         Args:
-            config: Filter configuration
+            config: Ranking configuration
         """
         self.config = config or self._default_config()
         self.stats = {
-            "total_scanned": 0,
-            "passed_social_filter": 0,
-            "passed_market_filter": 0,
-            "passed_technical_filter": 0,
-            "final_candidates": 0
+            "total_coins": 0,
+            "degen_gems": 0,  # Micro caps (<$10M)
+            "mid_caps": 0,  # $10M-$100M
+            "large_caps": 0,  # >$100M
+            "top_ranked": 0
         }
     
     def _default_config(self) -> Dict:
-        """Default filter configuration"""
+        """Default ranking configuration"""
         return {
-            # Social filters (LunarCrush)
-            "min_social_dominance": 0.1,  # >0.1% of total social activity
-            "min_interactions_24h": 1000,  # Minimum engagement
-            "min_galaxy_score": 40,  # Quality threshold
+            # Ranking weights
+            "weight_social_surge": 0.30,  # 30% - Most important!
+            "weight_altrank_jump": 0.25,  # 25% - Momentum
+            "weight_early_stage": 0.20,  # 20% - Room to grow
+            "weight_volume_spike": 0.15,  # 15% - Interest
+            "weight_sentiment": 0.10,  # 10% - Direction
             
-            # Market filters
-            "min_market_cap": 10_000_000,  # $10M minimum
-            "min_volume_24h": 1_000_000,  # $1M minimum
-            "max_volatility": 0.30,  # <30% volatility (too risky)
+            # Thresholds for scoring (NOT filtering!)
+            "social_surge_threshold": 500,  # +500% = strong surge
+            "altrank_jump_threshold": 500,  # +500 = big move
+            "micro_cap_threshold": 10_000_000,  # <$10M = micro
+            "volume_spike_threshold": 3.0,  # 3x average = spike
             
-            # Technical filters
-            "min_price_change_24h": -20,  # Not crashing
-            "max_price_change_24h": 100,  # Not pumping too hard
-            
-            # Output limits
-            "max_candidates": 10  # Maximum candidates to pass to AI
+            # Output
+            "top_n": 20,  # Top 20 for Claude to review
+            "include_all_surges": True  # Always include social surges
         }
     
-    def filter_candidates(
+    def rank_candidates(
         self,
         coins: List[Dict],
         mexc_data: Optional[Dict] = None
     ) -> List[Dict]:
         """
-        Filter coins through all stages
+        Rank ALL coins by potential
+        
+        NO FILTERING - just ranking!
         
         Args:
-            coins: List of LunarCrush coin data
-            mexc_data: Optional MEXC market data for validation
+            coins: List of LunarCrush coin data (ALL 1000)
+            mexc_data: Optional MEXC market data
         
         Returns:
-            List of top candidates (5-10 coins)
+            Top N ranked coins for Claude to analyze
         """
-        self.stats["total_scanned"] = len(coins)
+        self.stats["total_coins"] = len(coins)
         
-        logger.info(f"🔍 Filtering {len(coins)} coins...")
+        logger.info(f"📊 Ranking {len(coins)} coins (NO FILTERS!)...")
         
-        # Stage 1: Social filters
-        social_passed = self._filter_social_metrics(coins)
-        self.stats["passed_social_filter"] = len(social_passed)
-        logger.info(f"✅ Social filter: {len(social_passed)}/{len(coins)} passed")
-        
-        # Stage 2: Market filters
-        market_passed = self._filter_market_metrics(social_passed)
-        self.stats["passed_market_filter"] = len(market_passed)
-        logger.info(f"✅ Market filter: {len(market_passed)}/{len(social_passed)} passed")
-        
-        # Stage 3: Technical filters
-        technical_passed = self._filter_technical_metrics(market_passed)
-        self.stats["passed_technical_filter"] = len(technical_passed)
-        logger.info(f"✅ Technical filter: {len(technical_passed)}/{len(market_passed)} passed")
-        
-        # Stage 4: MEXC validation (if data available)
-        if mexc_data:
-            validated = self._validate_with_mexc(technical_passed, mexc_data)
-            logger.info(f"✅ MEXC validation: {len(validated)}/{len(technical_passed)} passed")
-        else:
-            validated = technical_passed
-        
-        # Stage 5: Rank and limit
-        final_candidates = self._rank_and_limit(validated)
-        self.stats["final_candidates"] = len(final_candidates)
-        
-        logger.info(f"🎯 Final candidates: {len(final_candidates)}")
-        
-        return final_candidates
-    
-    def _filter_social_metrics(self, coins: List[Dict]) -> List[Dict]:
-        """Filter by social metrics (LunarCrush)"""
-        filtered = []
+        # Calculate scores for ALL coins
+        scored_coins = []
         
         for coin in coins:
-            # Social dominance check
-            social_dom = coin.get("social_dominance", 0)
-            if social_dom < self.config["min_social_dominance"]:
-                continue
+            score_data = self._calculate_score(coin)
             
-            # Interactions check
-            interactions = coin.get("interactions_24h", 0)
-            if interactions < self.config["min_interactions_24h"]:
-                continue
+            # Add score to coin
+            coin["rank_score"] = score_data["total_score"]
+            coin["score_breakdown"] = score_data["breakdown"]
+            coin["rank_reasons"] = score_data["reasons"]
             
-            # Galaxy score (quality) check
-            galaxy = coin.get("galaxy_score", 0)
-            if galaxy < self.config["min_galaxy_score"]:
-                continue
+            scored_coins.append(coin)
             
-            # Passed all social filters
-            filtered.append(coin)
-        
-        return filtered
-    
-    def _filter_market_metrics(self, coins: List[Dict]) -> List[Dict]:
-        """Filter by market cap and volume"""
-        filtered = []
-        
-        for coin in coins:
-            # Market cap check
+            # Stats
             market_cap = coin.get("market_cap", 0)
-            if market_cap < self.config["min_market_cap"]:
-                continue
-            
-            # Volume check
-            volume_24h = coin.get("volume_24h", 0)
-            if volume_24h < self.config["min_volume_24h"]:
-                continue
-            
-            # Volatility check (if too high, too risky)
-            volatility = coin.get("volatility", 0)
-            if volatility > self.config["max_volatility"]:
-                continue
-            
-            # Passed all market filters
-            filtered.append(coin)
+            if market_cap < 10_000_000:
+                self.stats["degen_gems"] += 1
+            elif market_cap < 100_000_000:
+                self.stats["mid_caps"] += 1
+            else:
+                self.stats["large_caps"] += 1
         
-        return filtered
-    
-    def _filter_technical_metrics(self, coins: List[Dict]) -> List[Dict]:
-        """Filter by technical indicators"""
-        filtered = []
+        # Sort by score (highest first)
+        scored_coins.sort(key=lambda x: x["rank_score"], reverse=True)
         
-        for coin in coins:
-            # Price change check (avoid extreme moves)
-            price_change_24h = coin.get("percent_change_24h", 0)
-            
-            if price_change_24h < self.config["min_price_change_24h"]:
-                # Crashing too hard
-                continue
-            
-            if price_change_24h > self.config["max_price_change_24h"]:
-                # Pumping too hard (likely to dump)
-                continue
-            
-            # AltRank momentum (optional bonus)
-            alt_rank = coin.get("alt_rank", 0)
-            alt_rank_prev = coin.get("alt_rank_previous", 0)
-            
-            if alt_rank and alt_rank_prev:
-                alt_rank_change = alt_rank_prev - alt_rank
-                coin["alt_rank_change"] = alt_rank_change
-                
-                # Bonus for improving AltRank
-                if alt_rank_change > 0:
-                    coin["filter_score"] = coin.get("filter_score", 0) + 1
-            
-            # Sentiment bonus
-            sentiment = coin.get("sentiment", 50)
-            if sentiment > 70 or sentiment < 30:  # Extreme sentiment
-                coin["filter_score"] = coin.get("filter_score", 0) + 1
-            
-            # Passed all technical filters
-            filtered.append(coin)
+        # Get top N
+        top_n = self.config["top_n"]
+        top_candidates = scored_coins[:top_n]
         
-        return filtered
-    
-    def _validate_with_mexc(
-        self,
-        coins: List[Dict],
-        mexc_data: Dict
-    ) -> List[Dict]:
-        """
-        Validate candidates with MEXC market data
-        
-        Checks:
-        - Symbol exists on MEXC
-        - Sufficient liquidity
-        - Order book depth
-        """
-        validated = []
-        
-        for coin in coins:
-            symbol = coin.get("symbol", "")
-            
-            # Check if symbol exists in MEXC data
-            mexc_symbol = f"{symbol}/USDT"
-            if mexc_symbol not in mexc_data:
-                continue
-            
-            # Get MEXC ticker
-            ticker = mexc_data.get(mexc_symbol, {})
-            
-            # Validate volume
-            mexc_volume = ticker.get("quoteVolume", 0)
-            if mexc_volume < self.config["min_volume_24h"]:
-                continue
-            
-            # Add MEXC data to coin
-            coin["mexc_ticker"] = ticker
-            
-            validated.append(coin)
-        
-        return validated
-    
-    def _rank_and_limit(self, coins: List[Dict]) -> List[Dict]:
-        """
-        Rank candidates and limit to top N
-        
-        Ranking factors:
-        - Social dominance (weight: 30%)
-        - Interactions (weight: 25%)
-        - Galaxy score (weight: 20%)
-        - AltRank change (weight: 15%)
-        - Filter score (weight: 10%)
-        """
-        # Calculate composite score
-        for coin in coins:
-            social_dom = coin.get("social_dominance", 0)
-            interactions = coin.get("interactions_24h", 0)
-            galaxy = coin.get("galaxy_score", 0)
-            alt_rank_change = coin.get("alt_rank_change", 0)
-            filter_score = coin.get("filter_score", 0)
-            
-            # Normalize and weight
-            score = (
-                (social_dom / 1.0) * 30 +  # Normalize to max 1%
-                (interactions / 100000) * 25 +  # Normalize to 100k
-                (galaxy / 100) * 20 +
-                (alt_rank_change / 1000) * 15 +
-                filter_score * 10
-            )
-            
-            coin["candidate_score"] = score
-        
-        # Sort by score
-        coins.sort(key=lambda x: x.get("candidate_score", 0), reverse=True)
-        
-        # Limit to top N
-        max_candidates = self.config["max_candidates"]
-        top_candidates = coins[:max_candidates]
+        self.stats["top_ranked"] = len(top_candidates)
         
         # Log top candidates
-        for i, coin in enumerate(top_candidates, 1):
+        logger.info(f"🎯 Top {len(top_candidates)} ranked candidates:")
+        for i, coin in enumerate(top_candidates[:10], 1):  # Show top 10
+            symbol = coin.get("symbol", "UNKNOWN")
+            score = coin["rank_score"]
+            market_cap = coin.get("market_cap", 0)
+            reasons = ", ".join(coin["rank_reasons"][:2])  # Top 2 reasons
+            
             logger.info(
-                f"#{i} {coin.get('symbol', 'UNKNOWN')}: "
-                f"Score={coin.get('candidate_score', 0):.2f}, "
-                f"Social={coin.get('social_dominance', 0):.3f}%, "
-                f"Galaxy={coin.get('galaxy_score', 0):.1f}"
+                f"#{i} {symbol}: Score={score:.2f}, "
+                f"MCap=${market_cap/1e6:.1f}M, {reasons}"
             )
+        
+        logger.info(
+            f"📈 Distribution: {self.stats['degen_gems']} degen gems, "
+            f"{self.stats['mid_caps']} mid caps, {self.stats['large_caps']} large caps"
+        )
         
         return top_candidates
     
+    def _calculate_score(self, coin: Dict) -> Dict:
+        """
+        Calculate composite score for a coin
+        
+        Returns:
+            {
+                "total_score": float,
+                "breakdown": dict,
+                "reasons": list
+            }
+        """
+        breakdown = {}
+        reasons = []
+        
+        # Factor 1: Social Surge
+        social_volume = coin.get("social_volume_24h", 0)
+        social_volume_avg = coin.get("social_volume_avg", 1)
+        social_surge_ratio = social_volume / social_volume_avg if social_volume_avg > 0 else 1
+        
+        if social_surge_ratio > self.config["social_surge_threshold"]:
+            social_score = 100  # Max score!
+            reasons.append(f"Social surge {social_surge_ratio:.0f}x")
+        elif social_surge_ratio > 3:
+            social_score = 50 + (social_surge_ratio / self.config["social_surge_threshold"] * 50)
+            reasons.append(f"Social rising {social_surge_ratio:.1f}x")
+        else:
+            social_score = social_surge_ratio * 10
+        
+        breakdown["social_surge"] = social_score * self.config["weight_social_surge"]
+        
+        # Factor 2: AltRank Jump
+        alt_rank = coin.get("alt_rank", 10000)
+        alt_rank_prev = coin.get("alt_rank_previous", 10000)
+        alt_rank_jump = alt_rank_prev - alt_rank  # Positive = improving
+        
+        if alt_rank_jump > self.config["altrank_jump_threshold"]:
+            altrank_score = 100
+            reasons.append(f"AltRank +{alt_rank_jump}")
+        elif alt_rank_jump > 100:
+            altrank_score = (alt_rank_jump / self.config["altrank_jump_threshold"]) * 100
+            reasons.append(f"AltRank improving")
+        else:
+            altrank_score = max(0, alt_rank_jump / 10)
+        
+        breakdown["altrank_jump"] = altrank_score * self.config["weight_altrank_jump"]
+        
+        # Factor 3: Early Stage (Micro Cap Bonus)
+        market_cap = coin.get("market_cap", 0)
+        
+        if market_cap < 1_000_000:  # <$1M = ultra degen
+            early_stage_score = 100
+            reasons.append(f"Ultra micro ${market_cap/1e6:.2f}M")
+        elif market_cap < self.config["micro_cap_threshold"]:  # <$10M = degen
+            early_stage_score = 80
+            reasons.append(f"Micro cap ${market_cap/1e6:.1f}M")
+        elif market_cap < 50_000_000:  # <$50M = small
+            early_stage_score = 50
+        elif market_cap < 100_000_000:  # <$100M = mid
+            early_stage_score = 30
+        else:  # >$100M = large (still ok!)
+            early_stage_score = 10
+        
+        breakdown["early_stage"] = early_stage_score * self.config["weight_early_stage"]
+        
+        # Factor 4: Volume Spike
+        volume_24h = coin.get("volume_24h", 0)
+        volume_avg = coin.get("volume_avg", 1)
+        volume_spike_ratio = volume_24h / volume_avg if volume_avg > 0 else 1
+        
+        if volume_spike_ratio > self.config["volume_spike_threshold"]:
+            volume_score = min(100, volume_spike_ratio * 20)
+            reasons.append(f"Volume {volume_spike_ratio:.1f}x")
+        else:
+            volume_score = volume_spike_ratio * 10
+        
+        breakdown["volume_spike"] = volume_score * self.config["weight_volume_spike"]
+        
+        # Factor 5: Sentiment
+        sentiment = coin.get("sentiment", 50)
+        
+        if sentiment > 80:  # Extreme bullish
+            sentiment_score = 100
+            reasons.append(f"Bullish sentiment {sentiment:.0f}")
+        elif sentiment < 20:  # Extreme bearish (contrarian opportunity)
+            sentiment_score = 80
+            reasons.append(f"Bearish (contrarian) {sentiment:.0f}")
+        elif sentiment > 60:
+            sentiment_score = 60
+        elif sentiment < 40:
+            sentiment_score = 40
+        else:
+            sentiment_score = 30  # Neutral
+        
+        breakdown["sentiment"] = sentiment_score * self.config["weight_sentiment"]
+        
+        # Total score
+        total_score = sum(breakdown.values())
+        
+        # Bonus: If multiple strong signals, boost score
+        strong_signals = 0
+        if social_surge_ratio > 3:
+            strong_signals += 1
+        if alt_rank_jump > 200:
+            strong_signals += 1
+        if market_cap < 10_000_000:
+            strong_signals += 1
+        if volume_spike_ratio > 2:
+            strong_signals += 1
+        
+        if strong_signals >= 3:
+            total_score *= 1.2  # 20% bonus
+            reasons.insert(0, f"{strong_signals} strong signals!")
+        
+        return {
+            "total_score": total_score,
+            "breakdown": breakdown,
+            "reasons": reasons if reasons else ["Standard ranking"]
+        }
+    
     def get_stats(self) -> Dict:
-        """Get filter statistics"""
+        """Get ranking statistics"""
         return {
             **self.stats,
-            "filter_rate": (
-                (1 - self.stats["final_candidates"] / self.stats["total_scanned"])
-                * 100
-                if self.stats["total_scanned"] > 0 else 0
+            "degen_ratio": (
+                self.stats["degen_gems"] / self.stats["total_coins"] * 100
+                if self.stats["total_coins"] > 0 else 0
             )
         }
+    
+    def explain_ranking(self, coin: Dict) -> str:
+        """Generate human-readable explanation of ranking"""
+        symbol = coin.get("symbol", "UNKNOWN")
+        score = coin.get("rank_score", 0)
+        breakdown = coin.get("score_breakdown", {})
+        reasons = coin.get("rank_reasons", [])
+        
+        explanation = f"""
+🎯 {symbol} Ranking: {score:.2f}/100
+
+Top Reasons:
+{chr(10).join(f"  • {reason}" for reason in reasons[:5])}
+
+Score Breakdown:
+  • Social Surge: {breakdown.get('social_surge', 0):.1f}
+  • AltRank Jump: {breakdown.get('altrank_jump', 0):.1f}
+  • Early Stage: {breakdown.get('early_stage', 0):.1f}
+  • Volume Spike: {breakdown.get('volume_spike', 0):.1f}
+  • Sentiment: {breakdown.get('sentiment', 0):.1f}
+
+Market Data:
+  • Market Cap: ${coin.get('market_cap', 0)/1e6:.2f}M
+  • Volume 24h: ${coin.get('volume_24h', 0)/1e6:.2f}M
+  • Social Volume: {coin.get('social_volume_24h', 0)}
+  • AltRank: {coin.get('alt_rank', 'N/A')}
+  • Sentiment: {coin.get('sentiment', 50)}/100
+"""
+        
+        return explanation.strip()

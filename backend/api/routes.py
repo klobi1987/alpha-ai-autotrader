@@ -2,10 +2,12 @@
 Alpha AI Autotrader - API Routes
 REST API endpoints for the trading system
 """
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, WebSocket, WebSocketDisconnect
 from typing import List, Dict, Optional
 from pydantic import BaseModel
 from loguru import logger
+import json
+from datetime import datetime
 
 # Create router
 api_router = APIRouter()
@@ -159,13 +161,52 @@ async def get_performance():
 @api_router.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(message: ChatMessage):
     """Chat with AI"""
-    # Placeholder - will integrate with OpenRouter/Claude
+    # Placeholder - will integrate with ChatHandler
     logger.info(f"Chat message: {message.message}")
     
     return ChatResponse(
-        message=f"AI: You said '{message.message}'. Chat functionality coming soon!",
-        timestamp="2024-01-01T00:00:00Z"
+        message=f"AI: You said '{message.message}'. (Claude integration pending)",
+        timestamp=datetime.now().isoformat()
     )
+
+
+@api_router.websocket("/ws/chat")
+async def websocket_chat(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time chat with Claude
+    Supports streaming responses
+    """
+    await websocket.accept()
+    logger.info("✅ WebSocket chat connected")
+    
+    try:
+        while True:
+            # Receive message from user
+            data = await websocket.receive_text()
+            message_data = json.loads(data)
+            user_message = message_data.get("message", "")
+            
+            logger.info(f"💬 User: {user_message}")
+            
+            # TODO: Integrate with ChatHandler for Claude streaming
+            # For now, send placeholder response
+            response = {
+                "type": "message",
+                "role": "assistant",
+                "content": f"You said: {user_message}. (Claude streaming integration pending)",
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            await websocket.send_json(response)
+    
+    except WebSocketDisconnect:
+        logger.info("WebSocket chat disconnected")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        try:
+            await websocket.close()
+        except:
+            pass
 
 
 # ==================== Agent Status Endpoints ====================
