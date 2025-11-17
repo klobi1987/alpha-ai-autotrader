@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Alpha AI Autotrader - Server Installation Script
-# Installs all dependencies including Claude Agent SDK
+# Installs all dependencies and sets up the environment
 #
 
 set -e  # Exit on error
@@ -123,9 +123,6 @@ python3.11 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip -q
 pip install -r backend/requirements.txt -q
-
-# Install Claude Agent SDK
-pip install claude-agent-sdk -q
 
 echo -e "${GREEN}✓${NC} Python dependencies installed"
 echo ""
