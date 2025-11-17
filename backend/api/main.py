@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ..core.config import get_settings
 from .routes import api_router
+from .settings_routes import router as settings_router
 from .websocket import ConnectionManager
 
 # Get settings
@@ -86,6 +87,7 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(api_router, prefix="/api")
+app.include_router(settings_router)
 
 # Serve static files
 frontend_dir = Path(__file__).parent.parent.parent / "frontend"
