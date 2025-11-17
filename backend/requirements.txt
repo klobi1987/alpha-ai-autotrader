@@ -23,6 +23,12 @@ numpy==1.26.3
 scikit-learn==1.4.0
 joblib==1.3.2  # For model serialization
 
+# Advanced ML Features
+tensorflow==2.15.0  # LSTM Neural Networks (optional - for deep learning)
+matplotlib==3.8.2  # Pattern Visualization
+seaborn==0.13.1  # Enhanced visualization
+scipy==1.12.0  # Statistical functions & distance metrics
+
 # HTTP Requests & API Clients
 requests==2.31.0
 aiohttp==3.9.1
