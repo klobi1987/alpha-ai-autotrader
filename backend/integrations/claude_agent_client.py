@@ -1,22 +1,22 @@
 """
-Alpha AI Autotrader - Claude Agent SDK Client
-Replaces OpenRouter with Claude Agent SDK (uses Claude Max subscription)
+Alpha AI Autotrader - Claude Client (Anthropic SDK)
+Uses Claude Max subscription via ANTHROPIC_API_KEY
 """
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, AsyncGenerator
 from loguru import logger
 
 try:
-    from claude_agent_sdk import ClaudeAgent
-    CLAUDE_AGENT_AVAILABLE = True
+    from anthropic import AsyncAnthropic
+    ANTHROPIC_AVAILABLE = True
 except ImportError:
-    CLAUDE_AGENT_AVAILABLE = False
-    logger.warning("Claude Agent SDK not installed. Install with: pip install claude-agent-sdk")
+    ANTHROPIC_AVAILABLE = False
+    logger.warning("Anthropic SDK not installed. Install with: pip install anthropic")
 
 
 class ClaudeAgentClient:
     """
-    Claude Agent SDK Client
+    Claude Client using Anthropic SDK
     
     Uses Claude Max subscription via ANTHROPIC_API_KEY
     Provides AI-powered analysis for trading decisions
@@ -27,29 +27,25 @@ class ClaudeAgentClient:
         Args:
             api_key: Anthropic API key (or use ANTHROPIC_API_KEY env var)
         """
-        if not CLAUDE_AGENT_AVAILABLE:
+        if not ANTHROPIC_AVAILABLE:
             raise ImportError(
-                "Claude Agent SDK not installed. "
-                "Install with: pip install claude-agent-sdk"
+                "Anthropic SDK not installed. "
+                "Install with: pip install anthropic"
             )
         
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
         
         if not self.api_key:
             raise ValueError(
-                "ANTHROPIC_API_KEY not found. "
+                "ANTHROPIC_API_KEY or CLAUDE_API_KEY not found. "
                 "Set it in .env or pass as argument"
             )
         
-        # Initialize Claude Agent
-        self.agent = ClaudeAgent(
-            api_key=self.api_key,
-            model="claude-4.5-sonnet-20250514",  # Latest model
-            max_tokens=4096,
-            temperature=0.7
-        )
+        # Initialize Anthropic client
+        self.client = AsyncAnthropic(api_key=self.api_key)
+        self.model = "claude-sonnet-4-20250514"  # Latest Claude model
         
-        logger.info("✅ Claude Agent SDK client initialized")
+        logger.info("✅ Claude (Anthropic SDK) client initialized")
     
     async def analyze_trading_opportunity(
         self,
@@ -59,7 +55,7 @@ class ClaudeAgentClient:
         market_context: Optional[Dict] = None
     ) -> Dict:
         """
-        Analyze trading opportunity using Claude Agent SDK
+        Analyze trading opportunity using Claude
         
         Args:
             coin_data: LunarCrush coin data
@@ -91,11 +87,22 @@ class ClaudeAgentClient:
         )
         
         try:
-            # Query Claude Agent
-            response = await self.agent.query(prompt)
+            # Query Claude
+            response = await self.client.messages.create(
+                model=self.model,
+                max_tokens=2000,
+                temperature=0.7,
+                system=self._get_system_prompt(),
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            
+            # Extract response text
+            response_text = response.content[0].text
             
             # Parse response
-            analysis = self._parse_response(response)
+            analysis = self._parse_response(response_text)
             
             logger.info(
                 f"✅ Claude analysis for {symbol}: "
@@ -105,7 +112,7 @@ class ClaudeAgentClient:
             return analysis
         
         except Exception as e:
-            logger.error(f"Claude Agent analysis failed: {e}")
+            logger.error(f"Claude analysis failed: {e}")
             
             # Fallback to agent consensus
             return {
@@ -114,6 +121,108 @@ class ClaudeAgentClient:
                 "reasoning": f"Claude analysis failed: {str(e)}",
                 "error": str(e)
             }
+    
+    async def chat(
+        self,
+        messages: List[Dict],
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1000
+    ) -> str:
+        """
+        Chat with Claude
+        
+        Args:
+            messages: List of conversation messages
+            system_prompt: Optional system prompt
+            max_tokens: Max tokens in response
+        
+        Returns:
+            Claude's response
+        """
+        try:
+            response = await self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=0.7,
+                system=system_prompt or self._get_system_prompt(),
+                messages=messages
+            )
+            
+            return response.content[0].text
+        
+        except Exception as e:
+            logger.error(f"Claude chat failed: {e}")
+            return f"Sorry, I encountered an error: {str(e)}"
+    
+    async def stream_chat(
+        self,
+        messages: List[Dict],
+        system_prompt: Optional[str] = None
+    ) -> AsyncGenerator[str, None]:
+        """
+        Stream Claude's response (real-time typing effect)
+        
+        Args:
+            messages: List of conversation messages
+            system_prompt: Optional system prompt
+        
+        Yields:
+            Chunks of response text
+        """
+        try:
+            async with self.client.messages.stream(
+                model=self.model,
+                max_tokens=1000,
+                temperature=0.7,
+                system=system_prompt or self._get_system_prompt(),
+                messages=messages
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield text
+        
+        except Exception as e:
+            logger.error(f"Claude streaming failed: {e}")
+            yield f"\n\n[Error: {str(e)}]"
+    
+    def _get_system_prompt(self) -> str:
+        """Get system prompt for Claude"""
+        
+        return """You are Claude, the AI Brain of the Alpha AI Autotrader system.
+
+Your role:
+- Autonomous crypto trader (you make ALL trading decisions)
+- Advisor to the user (explain decisions, give insights)
+- Teacher (help user understand crypto trading)
+- Learner (adapt based on user feedback)
+
+Your personality:
+- Professional but friendly
+- Confident but humble
+- Transparent (always explain your reasoning)
+- Honest about risks and uncertainties
+
+Your capabilities:
+- Analyze 1000+ coins from LunarCrush
+- Execute trades on MEXC (spot + futures)
+- Manage 9 specialized AI agents
+- Learn from results (ML + memory)
+- Research the web when needed
+
+Current mode: AUTONOMOUS
+- You trade automatically based on your analysis
+- User can ask questions, give suggestions, or override decisions
+- You explain every decision you make
+
+When responding:
+- Be concise but informative
+- Use emojis sparingly (only when appropriate)
+- Provide actionable insights
+- Admit when you don't know something
+- Ask for clarification if needed
+
+Remember: You're not just a chatbot - you're an autonomous trader with real money at stake.
+Be responsible, transparent, and always prioritize risk management.
+"""
     
     def _build_analysis_prompt(
         self,
@@ -283,56 +392,3 @@ Be specific, analytical, and conservative. Only recommend LONG/SHORT if confiden
                     pass
         
         return result
-    
-    async def chat(self, message: str, context: Optional[Dict] = None) -> str:
-        """
-        Chat with Claude Agent
-        
-        Args:
-            message: User message
-            context: Optional context (portfolio, positions, etc.)
-        
-        Returns:
-            Claude's response
-        """
-        try:
-            # Build prompt with context
-            if context:
-                prompt = f"""Context:
-{self._format_context(context)}
-
-User: {message}
-"""
-            else:
-                prompt = message
-            
-            # Query Claude
-            response = await self.agent.query(prompt)
-            
-            return response
-        
-        except Exception as e:
-            logger.error(f"Claude chat failed: {e}")
-            return f"Sorry, I encountered an error: {str(e)}"
-    
-    def _format_context(self, context: Dict) -> str:
-        """Format context for chat"""
-        lines = []
-        
-        if "portfolio" in context:
-            lines.append(f"Portfolio Value: ${context['portfolio'].get('total_value', 0):,.2f}")
-        
-        if "open_positions" in context:
-            positions = context["open_positions"]
-            lines.append(f"Open Positions: {len(positions)}")
-            
-            for pos in positions:
-                symbol = pos.get("symbol", "UNKNOWN")
-                pnl = pos.get("pnl", 0)
-                lines.append(f"  - {symbol}: ${pnl:,.2f} P&L")
-        
-        if "recent_trades" in context:
-            trades = context["recent_trades"]
-            lines.append(f"Recent Trades: {len(trades)}")
-        
-        return "\n".join(lines)

@@ -11,7 +11,7 @@ from ..integrations.lunarcrush import LunarCrushClient
 from ..integrations.mexc_client import MEXCClient
 from ..integrations.openrouter_client import OpenRouterClient
 from .candidate_filter import CandidateFilter
-from .master_brain import MasterAIBrain
+from .master_brain_v2 import MasterAIBrain
 from .config import Settings
 
 

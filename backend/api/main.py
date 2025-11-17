@@ -17,6 +17,7 @@ from ..core.config import get_settings
 from .routes import api_router
 from .settings_routes import router as settings_router
 from .websocket import ConnectionManager
+from .chat_handler import ChatHandler
 
 # Get settings
 settings = get_settings()
@@ -46,6 +47,15 @@ async def lifespan(app: FastAPI):
     # Initialize WebSocket manager
     app.state.ws_manager = ConnectionManager()
     logger.info("✅ WebSocket manager initialized")
+    
+    # Initialize ChatHandler
+    from ..integrations.claude_agent_client import ClaudeAgentClient
+    from ..core.master_brain_v2 import MasterAIBrain
+    
+    claude_client = ClaudeAgentClient()
+    master_brain = MasterAIBrain(claude_client=claude_client)
+    app.state.chat_handler = ChatHandler(claude_client, master_brain)
+    logger.info("✅ Chat Handler initialized")
     
     # Initialize trading system (if enabled)
     if settings.ENABLE_AUTO_TRADING:
@@ -248,11 +258,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
 async def process_chat_message(message: str) -> Dict:
     """Process chat message with AI"""
-    # Placeholder - will be implemented with AI chat
-    return {
-        "message": f"AI: You said '{message}'. Chat functionality coming soon!",
-        "timestamp": "2024-01-01T00:00:00Z"
-    }
+    chat_handler: ChatHandler = app.state.chat_handler
+    response = await chat_handler.handle_user_message(message)
+    return response
 
 
 async def process_command(data: Dict) -> Dict:
