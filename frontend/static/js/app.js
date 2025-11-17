@@ -73,6 +73,15 @@ function app() {
         message: null,
         messageType: 'info',
         
+        // ML Patterns
+        mlPatterns: [],
+        mlPatternStats: {
+            total_patterns: 0,
+            active_patterns: 0,
+            avg_success_rate: 0,
+            avg_return: 0
+        },
+        
         // WebSocket
         ws: null,
         wsConnected: false,
@@ -88,6 +97,9 @@ function app() {
             
             // Connect WebSocket
             this.connectWebSocket();
+            
+            // Load ML Patterns
+            this.loadMLPatterns();
             
             // Fetch initial data
             this.fetchData();
@@ -590,6 +602,145 @@ function app() {
                 'not_set': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400'
             };
             return colors[status] || colors['not_set'];
+        },
+        
+        // ========================================
+        // ML Patterns Methods
+        // ========================================
+        
+        /**
+         * Load ML patterns from API
+         */
+        async loadMLPatterns() {
+            try {
+                const response = await fetch('/api/ml-patterns/patterns?active_only=false');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.mlPatterns = data.patterns || [];
+                    console.log(`✅ Loaded ${this.mlPatterns.length} ML patterns`);
+                }
+                
+                // Load statistics
+                await this.loadMLPatternStats();
+                
+            } catch (error) {
+                console.error('❌ Failed to load ML patterns:', error);
+            }
+        },
+        
+        /**
+         * Load ML pattern statistics
+         */
+        async loadMLPatternStats() {
+            try {
+                const response = await fetch('/api/ml-patterns/statistics');
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.mlPatternStats = data.statistics || {};
+                    console.log('✅ Loaded ML pattern statistics');
+                }
+                
+            } catch (error) {
+                console.error('❌ Failed to load ML pattern statistics:', error);
+            }
+        },
+        
+        /**
+         * Refresh ML patterns
+         */
+        async refreshMLPatterns() {
+            console.log('🔄 Refreshing ML patterns...');
+            await this.loadMLPatterns();
+        },
+        
+        /**
+         * Trigger pattern discovery
+         */
+        async discoverPatterns() {
+            try {
+                console.log('🔍 Triggering pattern discovery...');
+                
+                const response = await fetch('/api/ml-patterns/discover', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    console.log('✅ Pattern discovery triggered');
+                    alert('Pattern discovery started! This may take a few minutes.');
+                    
+                    // Refresh after delay
+                    setTimeout(() => this.loadMLPatterns(), 5000);
+                } else {
+                    alert('Failed to trigger pattern discovery');
+                }
+                
+            } catch (error) {
+                console.error('❌ Failed to trigger pattern discovery:', error);
+                alert('Error triggering pattern discovery');
+            }
+        },
+        
+        /**
+         * Prune underperforming patterns
+         */
+        async prunePatterns() {
+            try {
+                if (!confirm('Are you sure you want to prune underperforming patterns?')) {
+                    return;
+                }
+                
+                console.log('🗑️ Pruning patterns...');
+                
+                const response = await fetch('/api/ml-patterns/prune', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    console.log(`✅ Pruned ${data.pruned_count} patterns`);
+                    alert(`Pruned ${data.pruned_count} underperforming patterns`);
+                    
+                    // Refresh
+                    await this.loadMLPatterns();
+                } else {
+                    alert('Failed to prune patterns');
+                }
+                
+            } catch (error) {
+                console.error('❌ Failed to prune patterns:', error);
+                alert('Error pruning patterns');
+            }
+        },
+        
+        /**
+         * Export patterns
+         */
+        async exportPatterns() {
+            try {
+                console.log('💾 Exporting patterns...');
+                
+                const response = await fetch('/api/ml-patterns/export', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    console.log('✅ Patterns exported:', data.filepath);
+                    alert(`Patterns exported to: ${data.filepath}`);
+                } else {
+                    alert('Failed to export patterns');
+                }
+                
+            } catch (error) {
+                console.error('❌ Failed to export patterns:', error);
+                alert('Error exporting patterns');
+            }
         }
     };
 }

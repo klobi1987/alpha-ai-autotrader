@@ -110,6 +110,11 @@
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
                         AI Agents
                     </button>
+                    <button @click="currentView = 'ml-patterns'" 
+                            :class="currentView === 'ml-patterns' ? 'border-purple-500 text-purple-600 dark:text-purple-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
+                        ML Patterns
+                    </button>
                     <button @click="currentView = 'settings'" 
                             :class="currentView === 'settings' ? 'border-purple-500 text-purple-600 dark:text-purple-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'"
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors">
@@ -257,6 +262,146 @@
                     <h2 class="text-xl font-semibold mb-4">🤖 AI Agents Status</h2>
                     <p class="text-gray-600 dark:text-gray-400">Agents view implementation coming soon...</p>
                 </div>
+            </div>
+            
+            <!-- ML Patterns View -->
+            <div x-show="currentView === 'ml-patterns'" x-cloak class="space-y-6">
+                
+                <!-- Statistics Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Total Patterns</p>
+                                <p class="text-2xl font-bold mt-1" x-text="mlPatternStats.total_patterns || 0"></p>
+                            </div>
+                            <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl">🧠</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Active Patterns</p>
+                                <p class="text-2xl font-bold mt-1" x-text="mlPatternStats.active_patterns || 0"></p>
+                            </div>
+                            <div class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl">✅</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Avg Success Rate</p>
+                                <p class="text-2xl font-bold mt-1" x-text="((mlPatternStats.avg_success_rate || 0) * 100).toFixed(1) + '%'"></p>
+                            </div>
+                            <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl">🎯</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-600 dark:text-gray-400">Avg Return</p>
+                                <p class="text-2xl font-bold mt-1" 
+                                   :class="(mlPatternStats.avg_return || 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                                   x-text="((mlPatternStats.avg_return || 0) >= 0 ? '+' : '') + ((mlPatternStats.avg_return || 0) * 100).toFixed(2) + '%'"></p>
+                            </div>
+                            <div class="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg flex items-center justify-center">
+                                <span class="text-2xl">💰</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Actions -->
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                    <h3 class="text-lg font-semibold mb-4">🛠️ Pattern Management</h3>
+                    <div class="flex flex-wrap gap-3">
+                        <button @click="discoverPatterns()" 
+                                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2">
+                            <span>🔍</span>
+                            <span>Discover New Patterns</span>
+                        </button>
+                        <button @click="prunePatterns()" 
+                                class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2">
+                            <span>🗑️</span>
+                            <span>Prune Underperforming</span>
+                        </button>
+                        <button @click="exportPatterns()" 
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2">
+                            <span>💾</span>
+                            <span>Export Patterns</span>
+                        </button>
+                        <button @click="refreshMLPatterns()" 
+                                class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center space-x-2">
+                            <span>🔄</span>
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Patterns List -->
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                        <h3 class="text-lg font-semibold">📈 Discovered Patterns</h3>
+                    </div>
+                    <div class="p-6">
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="border-b border-gray-200 dark:border-gray-700">
+                                        <th class="text-left py-3 px-4 text-sm font-semibold">Pattern ID</th>
+                                        <th class="text-left py-3 px-4 text-sm font-semibold">Type</th>
+                                        <th class="text-center py-3 px-4 text-sm font-semibold">Confidence</th>
+                                        <th class="text-center py-3 px-4 text-sm font-semibold">Trades</th>
+                                        <th class="text-center py-3 px-4 text-sm font-semibold">Success Rate</th>
+                                        <th class="text-center py-3 px-4 text-sm font-semibold">Avg Return</th>
+                                        <th class="text-center py-3 px-4 text-sm font-semibold">Status</th>
+                                        <th class="text-center py-3 px-4 text-sm font-semibold">Discovered</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="pattern in mlPatterns" :key="pattern.id">
+                                        <tr class="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                            <td class="py-3 px-4 text-sm font-mono" x-text="pattern.pattern_id"></td>
+                                            <td class="py-3 px-4 text-sm" x-text="pattern.pattern_type"></td>
+                                            <td class="py-3 px-4 text-sm text-center">
+                                                <span class="px-2 py-1 rounded-full text-xs font-medium"
+                                                      :class="pattern.confidence >= 0.7 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : pattern.confidence >= 0.5 ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'"
+                                                      x-text="(pattern.confidence * 100).toFixed(0) + '%'"></span>
+                                            </td>
+                                            <td class="py-3 px-4 text-sm text-center" x-text="pattern.total_trades"></td>
+                                            <td class="py-3 px-4 text-sm text-center">
+                                                <span x-text="(pattern.success_rate * 100).toFixed(1) + '%'"></span>
+                                            </td>
+                                            <td class="py-3 px-4 text-sm text-center"
+                                                :class="pattern.avg_return >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'"
+                                                x-text="(pattern.avg_return >= 0 ? '+' : '') + (pattern.avg_return * 100).toFixed(2) + '%'"></td>
+                                            <td class="py-3 px-4 text-sm text-center">
+                                                <span class="px-2 py-1 rounded-full text-xs font-medium"
+                                                      :class="pattern.is_active ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400'"
+                                                      x-text="pattern.is_active ? 'Active' : 'Inactive'"></span>
+                                            </td>
+                                            <td class="py-3 px-4 text-sm text-center text-gray-500" x-text="new Date(pattern.discovered_at).toLocaleDateString()"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                            
+                            <div x-show="mlPatterns.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+                                <p>🔍 No patterns discovered yet. Click "Discover New Patterns" to start!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
             </div>
             
             <!-- Settings View -->

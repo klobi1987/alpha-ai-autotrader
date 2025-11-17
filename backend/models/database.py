@@ -208,13 +208,59 @@ Signal = TradingSignal
 Position = Trade  # Trade model represents both open and closed positions
 
 
-# Database session management
+class DiscoveredPattern(Base):
+    """ML-discovered trading patterns"""
+    __tablename__ = "discovered_patterns"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    pattern_id = Column(String, unique=True, index=True, nullable=False)
+    pattern_type = Column(String, nullable=False)  # "ml_discovered", "manual", etc.
+    cluster_id = Column(Integer, nullable=True)
+    
+    # Pattern characteristics
+    occurrences = Column(Integer, default=0)
+    confidence = Column(Float, default=0.5)
+    center_features = Column(Text)  # JSON string of feature values
+    
+    # Performance tracking
+    is_active = Column(Boolean, default=True)
+    total_trades = Column(Integer, default=0)
+    success_count = Column(Integer, default=0)
+    failure_count = Column(Integer, default=0)
+    avg_return = Column(Float, default=0.0)
+    
+    # Timestamps
+    discovered_at = Column(DateTime, nullable=False)
+    last_used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class PatternPerformance(Base):
+    """Performance history for discovered patterns"""
+    __tablename__ = "pattern_performance"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    pattern_id = Column(Integer, nullable=False)  # FK to DiscoveredPattern
+    trade_id = Column(Integer, nullable=True)  # FK to Trade
+    
+    # Execution details
+    executed_at = Column(DateTime, nullable=False)
+    profit_loss = Column(Float, nullable=False)
+    is_success = Column(Boolean, nullable=False)
+    confidence_at_execution = Column(Float)
+    
+    # Timestamps
+    created_at = Column(DateTime, server_default=func.now())
+
+
+# Database setup
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session as SQLSession
 from typing import Generator
+import os
 
-# Database URL (SQLite by default)
-DATABASE_URL = "sqlite:///./alpha_autotrader.db"
+# Get database URL from environment
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/alpha_autotrader.db")
 
 # Create engine
 engine = create_engine(
