@@ -674,3 +674,21 @@ REASONING: [your analysis]
             "agents_count": len(self.agents),
             "scan_interval": self.scan_interval
         }
+
+    
+    def get_agents_status(self) -> List[Dict]:
+        """Get status of all 9 agents"""
+        agents_status = []
+        
+        for agent in self.agents:
+            status = {
+                "name": agent.name,
+                "role": agent.role,
+                "status": "active" if self.is_running else "idle",
+                "total_analyses": getattr(agent, 'total_analyses', 0),
+                "avg_confidence": getattr(agent, 'avg_confidence', 0),
+                "last_analysis": getattr(agent, 'last_analysis_time', None)
+            }
+            agents_status.append(status)
+        
+        return agents_status

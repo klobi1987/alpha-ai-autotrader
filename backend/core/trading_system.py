@@ -164,6 +164,9 @@ class TradingSystem:
         candidates = self.candidate_filter.filter_candidates(coins)
         logger.info(f"🎯 Filtered to {len(candidates)} top candidates")
         
+        # Store latest candidates
+        self._latest_candidates = candidates
+        
         if not candidates:
             logger.info("No candidates passed filters")
             return
@@ -423,3 +426,15 @@ class TradingSystem:
             "master_brain_stats": self.master_brain.get_stats(),
             "filter_stats": self.candidate_filter.get_stats()
         }
+
+    
+    def get_latest_candidates(self) -> List[Dict]:
+        """Get latest filtered candidates"""
+        if not hasattr(self, '_latest_candidates'):
+            return []
+        return self._latest_candidates
+    
+    async def run_scan(self):
+        """Manually trigger a market scan"""
+        logger.info("📊 Manual scan triggered")
+        await self._run_scan()
