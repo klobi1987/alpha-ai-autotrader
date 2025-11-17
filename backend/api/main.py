@@ -17,6 +17,7 @@ from ..core.config import get_settings
 from .routes import api_router
 from .settings_routes import router as settings_router
 from .ml_patterns_routes import router as ml_patterns_router
+from .advanced_ml_routes import router as advanced_ml_router
 from .websocket import ConnectionManager
 from .chat_handler import ChatHandler
 
@@ -100,6 +101,7 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api")
 app.include_router(settings_router)
 app.include_router(ml_patterns_router)
+app.include_router(advanced_ml_router)
 
 # Serve static files
 frontend_dir = Path(__file__).parent.parent.parent / "frontend"
