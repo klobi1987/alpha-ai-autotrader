@@ -201,3 +201,40 @@ class SystemLog(Base):
     message = Column(Text, nullable=False)
     details = Column(JSON, nullable=True)
     timestamp = Column(DateTime, server_default=func.now())
+
+
+# Aliases for convenience
+Signal = TradingSignal
+Position = Trade  # Trade model represents both open and closed positions
+
+
+# Database session management
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session as SQLSession
+from typing import Generator
+
+# Database URL (SQLite by default)
+DATABASE_URL = "sqlite:///./alpha_autotrader.db"
+
+# Create engine
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False}  # Needed for SQLite
+)
+
+# Create session factory
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def init_db():
+    """Initialize database (create tables)"""
+    Base.metadata.create_all(bind=engine)
+
+
+def get_db() -> Generator[SQLSession, None, None]:
+    """Get database session (for FastAPI Depends)"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
