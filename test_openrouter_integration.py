@@ -90,7 +90,9 @@ def test_model_configuration(client: OpenRouterClient):
     """Test 2: Model Configuration"""
     print_section("TEST 2: Model Configuration")
 
-    print(f"Total models available: {len(client.MODELS)}\n")
+    print(f"Total models available: {len(client.MODELS)}")
+    print(f"Verified models: {len(client.get_verified_models())}")
+    print(f"Free models: {len(client.get_free_models())}\n")
 
     # Group by category
     categories = {}
@@ -103,17 +105,28 @@ def test_model_configuration(client: OpenRouterClient):
     for category, models in categories.items():
         print(f"📁 {category.upper()} ({len(models)} models):")
         for key, config in models:
-            cost_str = "FREE" if config['cost_per_1m'] == 0 else f"${config['cost_per_1m']}/1M"
+            cost_str = "FREE ✅" if config['cost_per_1m'] == 0 else f"${config['cost_per_1m']}/1M"
             thinking_icon = "🧠" if config.get('thinking') else "  "
-            print(f"   {thinking_icon} {config['name']:30s} | {cost_str:15s} | {config['id']}")
+            verified_icon = "✅" if config.get('verified') else "⚠️ "
+            print(f"   {verified_icon} {thinking_icon} {config['name']:30s} | {cost_str:15s}")
         print()
 
     # Test helper methods
     print("📊 Helper Methods:")
     print(f"   Free models: {client.get_free_models()}")
-    print(f"   Budget models (<$1/1M): {client.get_best_value_models(1.0)}")
+    print(f"   Budget models (<$0.5/1M): {client.get_best_value_models(0.5)}")
     print(f"   Thinking models: {client.get_models_by_category('thinking')}")
     print(f"   Recommended (trading): {client.get_recommended_models('trading')}")
+    print(f"   Recommended (coding): {client.get_recommended_models('coding')}")
+    print(f"   Recommended (premium): {client.get_recommended_models('premium')}")
+
+    # Test smart selection
+    print("\n🤖 Smart Model Selection:")
+    simple_model = client.smart_select_model("simple", max_cost_per_1m=0.5)
+    print(f"   Simple task (budget): {simple_model}")
+
+    complex_model = client.smart_select_model("complex", max_cost_per_1m=5.0, require_thinking=True)
+    print(f"   Complex task (thinking): {complex_model}")
 
 
 def test_simple_chat(client: OpenRouterClient):

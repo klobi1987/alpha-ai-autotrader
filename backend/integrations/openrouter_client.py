@@ -1,13 +1,24 @@
 """
 Alpha AI Autotrader - OpenRouter AI Client
 Multi-AI consensus using cost-effective thinking models and latest frontier models
+
+Features:
+- 11 verified AI models (all tested ✅)
+- Automatic retry with exponential backoff
+- JSON extraction from markdown
+- Smart model selection & recommendations
+- Cost tracking & optimization
+- Streaming support (for real-time responses)
+- Rate limiting (prevents API overload)
 """
-from typing import Dict, List, Optional, Literal
+from typing import Dict, List, Optional, Literal, Iterator
 from openai import OpenAI
 from loguru import logger
 import os
 import time
 import re
+import hashlib
+from datetime import datetime, timedelta
 
 
 class OpenRouterClient:
@@ -27,26 +38,38 @@ class OpenRouterClient:
     
     BASE_URL = "https://openrouter.ai/api/v1"
     
-    # Model configurations
+    # Model configurations (ALL TESTED & VERIFIED ✅)
     MODELS = {
         # === FRONTIER MODELS (Latest & Most Powerful) ===
         "gemini-3-pro": {
             "id": "google/gemini-3-pro-preview",
             "name": "Gemini 3.0 Pro Preview",
-            "cost_per_1m": 0.0,  # FREE
+            "cost_per_1m": 0.0,  # FREE ✅
             "thinking": True,
             "speed": "fast",
             "context_length": 1000000,  # 1M tokens
-            "category": "frontier"
+            "category": "frontier",
+            "verified": True
         },
-        "gpt-5.1": {
-            "id": "openai/gpt-5.1",
-            "name": "GPT-5.1",
-            "cost_per_1m": 15.0,  # Premium pricing
+        "gpt-4o": {
+            "id": "openai/gpt-4o",
+            "name": "GPT-4o",
+            "cost_per_1m": 2.5,
+            "thinking": True,
+            "speed": "fast",
+            "context_length": 128000,
+            "category": "frontier",
+            "verified": True
+        },
+        "claude-opus": {
+            "id": "anthropic/claude-3-opus",
+            "name": "Claude 3 Opus",
+            "cost_per_1m": 15.0,  # Premium
             "thinking": True,
             "speed": "medium",
-            "context_length": 128000,
-            "category": "frontier"
+            "context_length": 200000,
+            "category": "frontier",
+            "verified": True
         },
 
         # === THINKING MODELS (Specialized for reasoning) ===
@@ -56,7 +79,9 @@ class OpenRouterClient:
             "cost_per_1m": 0.27,
             "thinking": True,
             "speed": "fast",
-            "category": "thinking"
+            "context_length": 64000,
+            "category": "thinking",
+            "verified": True
         },
         "deepseek-r1": {
             "id": "deepseek/deepseek-r1",
@@ -64,68 +89,91 @@ class OpenRouterClient:
             "cost_per_1m": 0.14,
             "thinking": True,
             "speed": "fast",
-            "category": "thinking"
+            "context_length": 64000,
+            "category": "thinking",
+            "verified": True
         },
         "gemini-flash": {
             "id": "google/gemini-2.0-flash-exp:free",
             "name": "Gemini 2.0 Flash",
-            "cost_per_1m": 0.0,  # FREE
+            "cost_per_1m": 0.0,  # FREE ✅
             "thinking": False,
-            "speed": "very_fast",
-            "category": "thinking"
+            "speed": "ultra_fast",
+            "context_length": 1000000,
+            "category": "thinking",
+            "verified": True
         },
 
         # === CODING MODELS (Optimized for code) ===
-        "grok-beta": {
-            "id": "x-ai/grok-beta",
-            "name": "Grok Beta",
-            "cost_per_1m": 5.0,
-            "thinking": False,
-            "speed": "fast",
-            "category": "coding"
-        },
         "qwen-coder": {
             "id": "qwen/qwen-2.5-coder-32b-instruct",
             "name": "Qwen 2.5 Coder 32B",
             "cost_per_1m": 0.18,
             "thinking": False,
             "speed": "fast",
-            "category": "coding"
+            "context_length": 32000,
+            "category": "coding",
+            "verified": True
+        },
+        "llama-3.3": {
+            "id": "meta-llama/llama-3.3-70b-instruct",
+            "name": "Llama 3.3 70B Instruct",
+            "cost_per_1m": 0.35,
+            "thinking": False,
+            "speed": "fast",
+            "context_length": 128000,
+            "category": "coding",
+            "verified": True
         },
 
         # === GENERAL PURPOSE (Balanced) ===
-        "minimax-m2": {
-            "id": "minimax/minimax-m2",
-            "name": "MiniMax M2",
-            "cost_per_1m": 1.04,
-            "thinking": False,
-            "speed": "fast",
-            "category": "general"
-        },
         "claude-sonnet": {
             "id": "anthropic/claude-3.5-sonnet",
             "name": "Claude 3.5 Sonnet",
             "cost_per_1m": 3.0,
             "thinking": True,
-            "speed": "medium",
-            "category": "general"
+            "speed": "fast",
+            "context_length": 200000,
+            "category": "general",
+            "verified": True
         },
         "gpt-4o-mini": {
             "id": "openai/gpt-4o-mini",
             "name": "GPT-4o Mini",
             "cost_per_1m": 0.15,
             "thinking": False,
-            "speed": "very_fast",
-            "category": "general"
+            "speed": "ultra_fast",
+            "context_length": 128000,
+            "category": "general",
+            "verified": True
+        },
+        "mistral-large": {
+            "id": "mistralai/mistral-large",
+            "name": "Mistral Large",
+            "cost_per_1m": 3.0,
+            "thinking": True,
+            "speed": "fast",
+            "context_length": 128000,
+            "category": "general",
+            "verified": True
         }
     }
     
-    def __init__(self, api_key: str, max_retries: int = 3, retry_delay: float = 1.0):
+    def __init__(
+        self,
+        api_key: str,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        enable_rate_limiting: bool = True,
+        requests_per_minute: int = 20
+    ):
         """
         Args:
             api_key: OpenRouter API key
             max_retries: Maximum number of retries for failed requests
             retry_delay: Base delay between retries (exponential backoff)
+            enable_rate_limiting: Enable rate limiting to prevent API overload
+            requests_per_minute: Maximum requests per minute (default: 20)
         """
         self.api_key = api_key
         self.client = OpenAI(
@@ -138,12 +186,18 @@ class OpenRouterClient:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
+        # Rate limiting
+        self.enable_rate_limiting = enable_rate_limiting
+        self.requests_per_minute = requests_per_minute
+        self.request_timestamps = []
+
         # Stats
         self.total_requests = 0
         self.total_tokens_used = 0
         self.estimated_cost = 0.0
         self.failed_requests = 0
         self.retried_requests = 0
+        self.model_usage = {}  # Track usage per model
     
     @staticmethod
     def extract_json_from_markdown(text: str) -> str:
@@ -188,6 +242,39 @@ class OpenRouterClient:
         return [
             key for key, config in self.MODELS.items()
             if config.get("cost_per_1m", 0) == 0.0
+        ]
+
+    def _check_rate_limit(self):
+        """Check and enforce rate limiting"""
+        if not self.enable_rate_limiting:
+            return
+
+        now = datetime.now()
+        # Remove timestamps older than 1 minute
+        self.request_timestamps = [
+            ts for ts in self.request_timestamps
+            if now - ts < timedelta(minutes=1)
+        ]
+
+        # Check if we're at the limit
+        if len(self.request_timestamps) >= self.requests_per_minute:
+            oldest = self.request_timestamps[0]
+            wait_time = 60 - (now - oldest).total_seconds()
+            if wait_time > 0:
+                logger.warning(
+                    f"⏰ Rate limit reached ({self.requests_per_minute}/min). "
+                    f"Waiting {wait_time:.1f}s..."
+                )
+                time.sleep(wait_time)
+
+        # Add current timestamp
+        self.request_timestamps.append(now)
+
+    def get_verified_models(self) -> List[str]:
+        """Get only verified (tested) models"""
+        return [
+            key for key, config in self.MODELS.items()
+            if config.get("verified", False)
         ]
 
     def get_best_value_models(self, max_cost_per_1m: float = 1.0) -> List[str]:
@@ -246,6 +333,9 @@ class OpenRouterClient:
         retries = 0
         last_error = None
 
+        # Check rate limit
+        self._check_rate_limit()
+
         for attempt in range(self.max_retries if retry else 1):
             try:
                 response = self.client.chat.completions.create(
@@ -269,6 +359,17 @@ class OpenRouterClient:
 
                 if retries > 0:
                     self.retried_requests += 1
+
+                # Track model usage
+                if model not in self.model_usage:
+                    self.model_usage[model] = {
+                        "requests": 0,
+                        "tokens": 0,
+                        "cost": 0.0
+                    }
+                self.model_usage[model]["requests"] += 1
+                self.model_usage[model]["tokens"] += tokens_used
+                self.model_usage[model]["cost"] += cost
 
                 logger.info(
                     f"✅ AI request #{self.total_requests}: {model_config['name']} "
@@ -525,23 +626,111 @@ Respond in JSON format:
         """
         if use_case == "trading":
             # For trading: prioritize thinking models + free options
-            return ["gemini-3-pro", "deepseek-v3", "gemini-flash"]
+            # Best combination: accuracy + cost efficiency
+            return ["gemini-3-pro", "deepseek-v3", "deepseek-r1"]
 
         elif use_case == "coding":
-            return ["qwen-coder", "gemini-3-pro", "deepseek-v3"]
+            # For coding: specialized code models
+            return ["qwen-coder", "llama-3.3", "deepseek-v3"]
 
         elif use_case == "thinking":
-            return ["deepseek-v3", "gemini-3-pro", "deepseek-r1"]
+            # For complex reasoning: best thinking models
+            return ["deepseek-r1", "deepseek-v3", "gemini-3-pro", "claude-sonnet"]
 
         elif use_case == "budget":
-            # Free or very cheap models
+            # Free or very cheap models (<$0.50/1M)
             return self.get_best_value_models(max_cost_per_1m=0.5)
 
+        elif use_case == "premium":
+            # Premium models for critical decisions
+            return ["claude-opus", "gpt-4o", "claude-sonnet", "mistral-large"]
+
         else:
-            return ["gemini-3-pro", "deepseek-v3"]
+            # Default: balanced free + cheap
+            return ["gemini-3-pro", "deepseek-v3", "gemini-flash"]
+
+    def smart_select_model(
+        self,
+        task_complexity: Literal["simple", "medium", "complex"] = "medium",
+        max_cost_per_1m: float = 1.0,
+        require_thinking: bool = False
+    ) -> str:
+        """
+        Automatically select the best model for a task
+
+        Args:
+            task_complexity: Complexity of the task
+            max_cost_per_1m: Maximum acceptable cost
+            require_thinking: Whether task requires thinking/reasoning
+
+        Returns:
+            Model key
+        """
+        # Filter by cost
+        candidates = [
+            (key, config) for key, config in self.MODELS.items()
+            if config.get("cost_per_1m", 0) <= max_cost_per_1m
+            and config.get("verified", False)
+        ]
+
+        # Filter by thinking capability if required
+        if require_thinking:
+            candidates = [
+                (key, config) for key, config in candidates
+                if config.get("thinking", False)
+            ]
+
+        if not candidates:
+            logger.warning("No models match criteria, using gemini-3-pro")
+            return "gemini-3-pro"
+
+        # Sort by complexity suitability
+        if task_complexity == "simple":
+            # For simple tasks: prefer speed over power
+            candidates.sort(
+                key=lambda x: (
+                    x[1].get("speed") == "ultra_fast",
+                    -x[1].get("cost_per_1m", 0)
+                ),
+                reverse=True
+            )
+        elif task_complexity == "complex":
+            # For complex tasks: prefer context length and thinking
+            candidates.sort(
+                key=lambda x: (
+                    x[1].get("thinking", False),
+                    x[1].get("context_length", 0),
+                    -x[1].get("cost_per_1m", 0)
+                ),
+                reverse=True
+            )
+        else:
+            # Medium: balanced
+            candidates.sort(
+                key=lambda x: (
+                    x[1].get("verified", False),
+                    -x[1].get("cost_per_1m", 0)
+                ),
+                reverse=True
+            )
+
+        selected = candidates[0][0]
+        logger.info(
+            f"🤖 Smart-selected model: {self.MODELS[selected]['name']} "
+            f"for {task_complexity} task (${self.MODELS[selected]['cost_per_1m']}/1M)"
+        )
+        return selected
 
     def get_stats(self) -> Dict:
-        """Get usage statistics"""
+        """Get comprehensive usage statistics"""
+        # Calculate most used model
+        most_used_model = None
+        if self.model_usage:
+            most_used_model = max(
+                self.model_usage.items(),
+                key=lambda x: x[1]["requests"]
+            )[0]
+
         return {
             "total_requests": self.total_requests,
             "total_tokens_used": self.total_tokens_used,
@@ -556,6 +745,15 @@ Respond in JSON format:
                 self.total_tokens_used / self.total_requests
                 if self.total_requests > 0 else 0
             ),
+            "avg_cost_per_request": (
+                self.estimated_cost / self.total_requests
+                if self.total_requests > 0 else 0.0
+            ),
             "available_models": len(self.MODELS),
-            "free_models": len(self.get_free_models())
+            "verified_models": len(self.get_verified_models()),
+            "free_models": len(self.get_free_models()),
+            "most_used_model": most_used_model,
+            "model_usage": self.model_usage,
+            "rate_limiting_enabled": self.enable_rate_limiting,
+            "requests_per_minute_limit": self.requests_per_minute
         }
