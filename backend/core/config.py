@@ -3,20 +3,49 @@ Alpha AI Autotrader - Configuration Management
 """
 from pydantic_settings import BaseSettings
 from pydantic import Field
-from typing import Literal
+from typing import Literal, List
 import os
+import secrets
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
-    
+
     # Application
     app_name: str = Field(default="Alpha AI Autotrader", alias="APP_NAME")
     app_version: str = Field(default="1.0.0", alias="APP_VERSION")
     debug: bool = Field(default=False, alias="DEBUG")
     host: str = Field(default="0.0.0.0", alias="HOST")
     port: int = Field(default=8000, alias="PORT")
-    
+
+    # Security - CORS
+    cors_allowed_origins: str = Field(
+        default="http://localhost:3000,http://localhost:8000",
+        alias="CORS_ALLOWED_ORIGINS"
+    )
+    cors_allow_credentials: bool = Field(default=True, alias="CORS_ALLOW_CREDENTIALS")
+    cors_allow_methods: str = Field(default="GET,POST,PUT,DELETE,OPTIONS", alias="CORS_ALLOW_METHODS")
+    cors_allow_headers: str = Field(default="*", alias="CORS_ALLOW_HEADERS")
+
+    # Security - JWT Authentication
+    jwt_secret_key: str = Field(
+        default_factory=lambda: secrets.token_urlsafe(32),
+        alias="JWT_SECRET_KEY"
+    )
+    jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
+    jwt_access_token_expire_minutes: int = Field(default=30, alias="JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
+    jwt_refresh_token_expire_days: int = Field(default=7, alias="JWT_REFRESH_TOKEN_EXPIRE_DAYS")
+
+    # Security - API Keys
+    api_key_header_name: str = Field(default="X-API-Key", alias="API_KEY_HEADER_NAME")
+    require_api_key: bool = Field(default=False, alias="REQUIRE_API_KEY")
+    api_keys: str = Field(default="", alias="API_KEYS")  # Comma-separated list
+
+    # Security - Rate Limiting
+    rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
+    rate_limit_per_minute: int = Field(default=60, alias="RATE_LIMIT_PER_MINUTE")  # Requests per minute
+    rate_limit_strategy: str = Field(default="fixed-window", alias="RATE_LIMIT_STRATEGY")  # fixed-window or moving-window
+
     # Database
     database_url: str = Field(
         default="sqlite+aiosqlite:///./alpha_autotrader.db",
@@ -86,7 +115,7 @@ class Settings(BaseSettings):
             self.mexc_api_key and
             self.mexc_secret_key
         )
-    
+
     def is_live_trading_enabled(self) -> bool:
         """Check if live trading is enabled and configured"""
         return (
@@ -94,6 +123,24 @@ class Settings(BaseSettings):
             self.enable_auto_trading and
             self.is_configured()
         )
+
+    def get_cors_origins(self) -> List[str]:
+        """Get list of allowed CORS origins"""
+        if not self.cors_allowed_origins:
+            return []
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",")]
+
+    def get_cors_methods(self) -> List[str]:
+        """Get list of allowed CORS methods"""
+        if not self.cors_allow_methods:
+            return ["*"]
+        return [method.strip() for method in self.cors_allow_methods.split(",")]
+
+    def get_api_keys(self) -> List[str]:
+        """Get list of valid API keys"""
+        if not self.api_keys:
+            return []
+        return [key.strip() for key in self.api_keys.split(",") if key.strip()]
 
 
 # Global settings instance

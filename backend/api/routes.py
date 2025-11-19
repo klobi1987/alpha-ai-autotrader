@@ -1,10 +1,9 @@
 """
 Alpha AI Autotrader - API Routes
-REST API endpoints for the trading system
+REST API endpoints for the trading system with comprehensive input validation
 """
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, WebSocket, WebSocketDisconnect, Request
 from typing import List, Dict, Optional
-from pydantic import BaseModel
 from loguru import logger
 import json
 from datetime import datetime
@@ -12,42 +11,25 @@ from sqlalchemy.orm import Session
 
 from ..models.database import get_db, Signal, Position, Trade
 from ..core.settings_manager import SettingsManager
+from .schemas import (
+    APIKeyConfig,
+    TradingConfig,
+    ChatMessage,
+    ChatResponse,
+    ClosePositionRequest,
+    ManualTradeRequest,
+    SignalResponse,
+    PositionResponse,
+    PerformanceResponse,
+    TradingStatusResponse
+)
 
 # Create router
 api_router = APIRouter()
 
 
 # ==================== Request/Response Models ====================
-
-class APIKeyConfig(BaseModel):
-    """API keys configuration"""
-    lunarcrush_api_key: Optional[str] = None
-    mexc_api_key: Optional[str] = None
-    mexc_secret_key: Optional[str] = None
-    openrouter_api_key: Optional[str] = None
-    claude_api_key: Optional[str] = None
-
-
-class TradingConfig(BaseModel):
-    """Trading configuration"""
-    trading_mode: str = "testing"  # testing or live
-    max_position_size_usd: float = 500
-    max_concurrent_positions: int = 3
-    max_leverage: int = 5
-    stop_loss_percent: float = 2.0
-    min_confidence_score: float = 7.5
-    enable_auto_trading: bool = False
-
-
-class ChatMessage(BaseModel):
-    """Chat message"""
-    message: str
-
-
-class ChatResponse(BaseModel):
-    """Chat response"""
-    message: str
-    timestamp: str
+# All models moved to backend/api/schemas/trading.py for better validation and reusability
 
 
 # ==================== Configuration Endpoints ====================

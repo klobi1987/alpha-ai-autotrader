@@ -2,9 +2,9 @@
 Alpha AI Autotrader - FastAPI Main Application
 REST API + WebSocket server for the trading system
 """
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List, Dict, Optional
@@ -12,17 +12,24 @@ import os
 import json
 from loguru import logger
 from pathlib import Path
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from ..core.config import get_settings
 from .routes import api_router
 from .settings_routes import router as settings_router
 from .ml_patterns_routes import router as ml_patterns_router
 from .advanced_ml_routes import router as advanced_ml_router
+from .auth_routes import router as auth_router
 from .websocket import ConnectionManager
 from .chat_handler import ChatHandler
 
 # Get settings
 settings = get_settings()
+
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.rate_limit_per_minute}/minute"])
 
 # Configure logging
 logger.add(
@@ -88,16 +95,42 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# Add rate limiter to app state
+app.state.limiter = limiter
+
+# Add rate limit exceeded exception handler
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """Custom handler for rate limit exceeded errors"""
+    logger.warning(f"Rate limit exceeded for {get_remote_address(request)}")
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": "Rate limit exceeded",
+            "detail": "Too many requests. Please slow down and try again later.",
+            "limit": str(exc.detail) if hasattr(exc, 'detail') else f"{settings.rate_limit_per_minute} requests/minute"
+        }
+    )
+
+# CORS middleware - now configured via environment variables
+# In development: allows localhost origins
+# In production: MUST set CORS_ALLOWED_ORIGINS to your specific domains
+allowed_origins = settings.get_cors_origins()
+if settings.debug and not allowed_origins:
+    # Development fallback
+    allowed_origins = ["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:8000"]
+    logger.warning("⚠️  DEBUG mode: Using default CORS origins. Set CORS_ALLOWED_ORIGINS for production!")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=allowed_origins,
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=settings.get_cors_methods(),
+    allow_headers=settings.cors_allow_headers.split(",") if settings.cors_allow_headers != "*" else ["*"],
 )
 
 # Include API routes
+app.include_router(auth_router)  # Authentication routes (already has /api/auth prefix)
 app.include_router(api_router, prefix="/api")
 app.include_router(settings_router)
 app.include_router(ml_patterns_router)

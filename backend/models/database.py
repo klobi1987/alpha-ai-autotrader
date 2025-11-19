@@ -5,8 +5,12 @@ from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from datetime import datetime
+from passlib.context import CryptContext
 
 Base = declarative_base()
+
+# Password hashing context
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class CoinData(Base):
@@ -194,13 +198,49 @@ class PatternLibrary(Base):
 class SystemLog(Base):
     """System events and errors"""
     __tablename__ = "system_logs"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     level = Column(String, nullable=False)  # "INFO", "WARNING", "ERROR"
     module = Column(String)
     message = Column(Text, nullable=False)
     details = Column(JSON, nullable=True)
     timestamp = Column(DateTime, server_default=func.now())
+
+
+class User(Base):
+    """User accounts for authentication"""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+
+    # Profile
+    full_name = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_superuser = Column(Boolean, default=False)
+
+    # Settings & preferences
+    preferences = Column(JSON, nullable=True)  # User-specific settings
+
+    # Security
+    last_login = Column(DateTime, nullable=True)
+    failed_login_attempts = Column(Integer, default=0)
+    locked_until = Column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def verify_password(self, plain_password: str) -> bool:
+        """Verify a password against the hash"""
+        return pwd_context.verify(plain_password, self.hashed_password)
+
+    @staticmethod
+    def hash_password(password: str) -> str:
+        """Hash a password for storing"""
+        return pwd_context.hash(password)
 
 
 # Aliases for convenience
