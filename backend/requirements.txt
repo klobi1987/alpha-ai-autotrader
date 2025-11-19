@@ -63,6 +63,7 @@ python-jose[cryptography]==3.3.0  # JWT tokens
 passlib[bcrypt]==1.7.4  # Password hashing
 python-multipart==0.0.6
 cryptography>=42.0.0  # Encryption for API keys
+psutil==5.9.8  # System monitoring (CPU, memory, disk)
 
 # Testing
 pytest==7.4.4

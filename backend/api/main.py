@@ -22,6 +22,8 @@ from .settings_routes import router as settings_router
 from .ml_patterns_routes import router as ml_patterns_router
 from .advanced_ml_routes import router as advanced_ml_router
 from .auth_routes import router as auth_router
+from .monitoring_routes import router as monitoring_router
+from .monitoring_middleware import MonitoringMiddleware
 from .websocket import ConnectionManager
 from .chat_handler import ChatHandler
 
@@ -129,8 +131,13 @@ app.add_middleware(
     allow_headers=settings.cors_allow_headers.split(",") if settings.cors_allow_headers != "*" else ["*"],
 )
 
+# Add monitoring middleware (AFTER CORS, to track all requests)
+app.add_middleware(MonitoringMiddleware)
+logger.info("✅ Monitoring middleware enabled")
+
 # Include API routes
 app.include_router(auth_router)  # Authentication routes (already has /api/auth prefix)
+app.include_router(monitoring_router)  # Monitoring routes (already has /api/monitoring prefix)
 app.include_router(api_router, prefix="/api")
 app.include_router(settings_router)
 app.include_router(ml_patterns_router)
