@@ -112,9 +112,9 @@ async def get_signals(request: Request, db: Session = Depends(get_db)):
                 {
                     "id": sig.id,
                     "symbol": sig.symbol,
-                    "decision": sig.decision,
+                    "decision": sig.direction,
                     "confidence": sig.confidence,
-                    "reasoning": sig.reasoning,
+                    "reasoning": sig.reason,
                     "entry_price": sig.entry_price,
                     "stop_loss": sig.stop_loss,
                     "take_profit": sig.take_profit,
@@ -152,14 +152,14 @@ async def get_positions(request: Request, db: Session = Depends(get_db)):
                 "symbol": pos.symbol,
                 "side": pos.side,
                 "entry_price": pos.entry_price,
-                "current_price": pos.current_price or pos.entry_price,
+                "current_price": pos.entry_price,  # Will be updated from MEXC if available
                 "quantity": pos.quantity,
                 "leverage": pos.leverage,
                 "stop_loss": pos.stop_loss,
                 "take_profit": pos.take_profit,
                 "pnl_usd": pos.pnl_usd or 0,
-                "pnl_pct": pos.pnl_pct or 0,
-                "opened_at": pos.opened_at.isoformat()
+                "pnl_pct": pos.pnl_percent or 0,
+                "opened_at": pos.entry_time.isoformat()
             }
 
             # Try to get current price
