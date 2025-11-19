@@ -8,9 +8,20 @@ from loguru import logger
 import json
 from datetime import datetime
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..models.database import get_db, Signal, Position, Trade
 from ..core.settings_manager import SettingsManager
+from ..core.exceptions import (
+    ConfigurationError,
+    DatabaseError,
+    RecordNotFoundError,
+    PositionNotFoundError,
+    TradingError,
+    OrderExecutionError,
+    DataError,
+    get_exception_details
+)
 from .schemas import (
     APIKeyConfig,
     TradingConfig,
@@ -41,8 +52,17 @@ async def get_config(request: Request):
         settings_mgr = SettingsManager()
         config = settings_mgr.get_trading_config()
         return config
+    except ConfigurationError as e:
+        logger.error(f"Configuration error: {get_exception_details(e)}")
+        # Fallback to defaults
+        return {
+            "trading_mode": "testing",
+            "max_position_size_usd": 500,
+            "max_concurrent_positions": 3,
+            "enable_auto_trading": False
+        }
     except Exception as e:
-        logger.error(f"Failed to get config: {e}")
+        logger.error(f"Unexpected error getting config: {get_exception_details(e)}")
         # Fallback to defaults
         return {
             "trading_mode": "testing",
@@ -58,18 +78,24 @@ async def update_config(config: TradingConfig, request: Request):
     try:
         settings_mgr = SettingsManager()
         settings_mgr.save_trading_config(config.dict())
-        
+
         # Update trading system if running
         if hasattr(request.app.state, 'trading_system'):
             trading_system = request.app.state.trading_system
             # Update settings dynamically
             # trading_system.update_config(config.dict())
-        
+
         logger.info(f"Configuration updated: {config.dict()}")
         return {"status": "success", "message": "Configuration updated"}
+    except ConfigurationError as e:
+        logger.error(f"Configuration error: {get_exception_details(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        logger.error(f"Permission error updating config: {get_exception_details(e)}")
+        raise HTTPException(status_code=403, detail="Permission denied to update configuration")
     except Exception as e:
-        logger.error(f"Failed to update config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error updating config: {get_exception_details(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ==================== Trading Endpoints ====================
@@ -80,7 +106,7 @@ async def get_signals(request: Request, db: Session = Depends(get_db)):
     try:
         # Get recent signals from database
         signals = db.query(Signal).order_by(Signal.created_at.desc()).limit(20).all()
-        
+
         return {
             "signals": [
                 {
@@ -98,8 +124,14 @@ async def get_signals(request: Request, db: Session = Depends(get_db)):
                 for sig in signals
             ]
         }
+    except SQLAlchemyError as e:
+        logger.error(f"Database error getting signals: {get_exception_details(e)}")
+        return {"signals": []}
+    except AttributeError as e:
+        logger.error(f"Signal attribute error: {get_exception_details(e)}")
+        return {"signals": []}
     except Exception as e:
-        logger.error(f"Failed to get signals: {e}")
+        logger.error(f"Unexpected error getting signals: {get_exception_details(e)}")
         return {"signals": []}
 
 
@@ -109,10 +141,10 @@ async def get_positions(request: Request, db: Session = Depends(get_db)):
     try:
         # Get open positions from database
         positions = db.query(Position).filter(Position.status == "open").all()
-        
+
         # Get current prices from MEXC (if available)
         mexc_client = getattr(request.app.state, 'mexc_client', None)
-        
+
         result_positions = []
         for pos in positions:
             pos_data = {
@@ -129,32 +161,40 @@ async def get_positions(request: Request, db: Session = Depends(get_db)):
                 "pnl_pct": pos.pnl_pct or 0,
                 "opened_at": pos.opened_at.isoformat()
             }
-            
+
             # Try to get current price
             if mexc_client:
                 try:
                     ticker = await mexc_client.get_ticker(pos.symbol)
                     current_price = ticker.get('last', pos.entry_price)
-                    
+
                     # Calculate P&L
                     if pos.side == "LONG":
                         pnl_pct = ((current_price - pos.entry_price) / pos.entry_price) * 100 * pos.leverage
                     else:  # SHORT
                         pnl_pct = ((pos.entry_price - current_price) / pos.entry_price) * 100 * pos.leverage
-                    
+
                     pnl_usd = (pos.quantity * pos.entry_price) * (pnl_pct / 100)
-                    
+
                     pos_data["current_price"] = current_price
                     pos_data["pnl_pct"] = round(pnl_pct, 2)
                     pos_data["pnl_usd"] = round(pnl_usd, 2)
-                except:
-                    pass
-            
+                except (ConnectionError, TimeoutError) as e:
+                    logger.warning(f"Failed to get current price for {pos.symbol}: {get_exception_details(e)}")
+                except (KeyError, ValueError, ZeroDivisionError) as e:
+                    logger.error(f"Error calculating P&L for {pos.symbol}: {get_exception_details(e)}")
+
             result_positions.append(pos_data)
-        
+
         return {"positions": result_positions}
+    except SQLAlchemyError as e:
+        logger.error(f"Database error getting positions: {get_exception_details(e)}")
+        return {"positions": []}
+    except AttributeError as e:
+        logger.error(f"Position attribute error: {get_exception_details(e)}")
+        return {"positions": []}
     except Exception as e:
-        logger.error(f"Failed to get positions: {e}")
+        logger.error(f"Unexpected error getting positions: {get_exception_details(e)}")
         return {"positions": []}
 
 
@@ -167,52 +207,71 @@ async def close_position(symbol: str, request: Request, db: Session = Depends(ge
             Position.symbol == symbol,
             Position.status == "open"
         ).first()
-        
+
         if not position:
-            raise HTTPException(status_code=404, detail=f"Position {symbol} not found")
-        
+            raise PositionNotFoundError(
+                f"Position {symbol} not found",
+                details={"symbol": symbol}
+            )
+
         # Get MEXC client
         mexc_client = getattr(request.app.state, 'mexc_client', None)
         if not mexc_client:
-            raise HTTPException(status_code=500, detail="MEXC client not available")
-        
+            raise ConfigurationError("MEXC client not available")
+
         # Close position on MEXC
         result = await mexc_client.close_position(
             symbol=symbol,
             side=position.side,
             quantity=position.quantity
         )
-        
+
         # Update database
         position.status = "closed"
         position.closed_at = datetime.now()
         position.close_price = result.get('price', position.current_price)
-        
+
         # Calculate final P&L
         if position.side == "LONG":
             pnl_pct = ((position.close_price - position.entry_price) / position.entry_price) * 100 * position.leverage
         else:
             pnl_pct = ((position.entry_price - position.close_price) / position.entry_price) * 100 * position.leverage
-        
+
         position.pnl_pct = pnl_pct
         position.pnl_usd = (position.quantity * position.entry_price) * (pnl_pct / 100)
-        
+
         db.commit()
-        
+
         logger.info(f"✅ Position {symbol} closed: {position.pnl_pct:.2f}% ({position.pnl_usd:.2f} USD)")
-        
+
         return {
             "status": "success",
             "message": f"Position {symbol} closed",
             "pnl_pct": position.pnl_pct,
             "pnl_usd": position.pnl_usd
         }
-    
+
+    except PositionNotFoundError as e:
+        logger.error(f"Position not found: {get_exception_details(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except ConfigurationError as e:
+        logger.error(f"Configuration error: {get_exception_details(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    except OrderExecutionError as e:
+        logger.error(f"Order execution failed: {get_exception_details(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error closing position: {get_exception_details(e)}")
+        raise HTTPException(status_code=500, detail="Database error")
+    except (ValueError, ZeroDivisionError) as e:
+        logger.error(f"Calculation error: {get_exception_details(e)}")
+        raise HTTPException(status_code=500, detail="Error calculating P&L")
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to close position {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error closing position {symbol}: {get_exception_details(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @api_router.post("/trading/start")
@@ -220,19 +279,25 @@ async def start_trading(request: Request):
     """Start auto-trading"""
     try:
         trading_system = getattr(request.app.state, 'trading_system', None)
-        
+
         if not trading_system:
-            raise HTTPException(status_code=500, detail="Trading system not initialized")
-        
+            raise ConfigurationError("Trading system not initialized")
+
         # Start trading
         await trading_system.start()
-        
+
         logger.info("✅ Auto-trading started")
         return {"status": "success", "message": "Auto-trading started"}
-    
-    except Exception as e:
-        logger.error(f"Failed to start trading: {e}")
+
+    except ConfigurationError as e:
+        logger.error(f"Configuration error: {get_exception_details(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    except TradingError as e:
+        logger.error(f"Trading error: {get_exception_details(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error starting trading: {get_exception_details(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @api_router.post("/trading/stop")
